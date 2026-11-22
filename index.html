@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SleepMate AI</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f7fb;
+      color: #222;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .summary-item {
+      background: #f2f5ff;
+      padding: 15px;
+      border-radius: 10px;
+    }
+
+    .summary-item strong {
+      display: block;
+      font-size: 20px;
+      margin-top: 5px;
+    }
+
+    input, button {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+
+    button {
+      cursor: pointer;
+      background: #4f6df5;
+      color: white;
+      border: none;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .delete-btn {
+      background: #e95b5b;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+
+    .form-row input {
+      flex: 1;
+      min-width: 130px;
+    }
+
+    #chatBox {
+      height: 260px;
+      overflow-y: auto;
+      background: #f8f9fc;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    .message {
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 10px;
+      white-space: pre-wrap;
+    }
+
+    .user {
+      background: #dfe6ff;
+    }
+
+    .assistant {
+      background: #e9f7ec;
+    }
+
+    .loading {
+      color: #777;
+      margin: 10px 0;
+    }
+
+    .data-item, .conversation-item {
+      border-bottom: 1px solid #eee;
+      padding: 10px 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .conversation-item button {
+      margin-left: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+
+    <h1>🌙 SleepMate AI</h1>
+    <div class="subtitle">내 수면 데이터를 이해하는 AI 비서</div>
+
+    <div class="card">
+      <h2>📊 수면 요약</h2>
+      <div id="summary" class="summary-grid">
+        불러오는 중...
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💬 AI 수면 비서</h2>
+
+      <div id="chatBox"></div>
+
+      <div id="loading" class="loading" style="display:none;">
+        AI가 수면 데이터를 분석하고 있어요...
+      </div>
+
+      <div class="form-row">
+        <input
+          id="chatInput"
+          type="text"
+          placeholder="예: 최근 내 수면시간은 어때?"
+        >
+        <button onclick="sendChat()">질문하기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📝 수면 데이터 관리</h2>
+
+      <div class="form-row">
+        <input id="dateInput" type="date">
+        <input
+          id="valueInput"
+          type="number"
+          step="0.1"
+          min="0.1"
+          max="24"
+          placeholder="수면시간"
+        >
+        <input id="memoInput" type="text" placeholder="메모">
+        <button onclick="addData()">추가</button>
+      </div>
+
+      <div id="dataList">불러오는 중...</div>
+    </div>
+
+    <div class="card">
+      <h2>🕘 이전 대화</h2>
+      <div id="conversationList">불러오는 중...</div>
+    </div>
+
+  </div>
+
+<script>
+  const API = "http://127.0.0.1:8000";
+
+  async function loadSummary() {
+    try {
+      const response = await fetch(`${API}/api/data/summary`);
+      const data = await response.json();
+
+      document.getElementById("summary").innerHTML = `
+        <div class="summary-item">
+          데이터
+          <strong>${data.count}개</strong>
+        </div>
+
+        <div class="summary-item">
+          평균
+          <strong>${data.average}시간</strong>
+        </div>
+
+        <div class="summary-item">
+          최대
+          <strong>${data.max}시간</strong>
+        </div>
+
+        <div class="summary-item">
+          최소
+          <strong>${data.min}시간</strong>
+        </div>
+
+        <div class="summary-item">
+          최근 추세
+          <strong style="font-size:14px;">
+            ${data.trend}
+          </strong>
+        </div>
+      `;
+    } catch (error) {
+      document.getElementById("summary").innerText =
+        "요약 데이터를 불러오지 못했습니다.";
+    }
+  }
+
+
+  async function sendChat() {
+    const input = document.getElementById("chatInput");
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    addMessage("user", message);
+
+    input.value = "";
+
+    const loading = document.getElementById("loading");
+    loading.style.display = "block";
+
+    try {
+      const response = await fetch(`${API}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: message
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "AI 요청 실패");
+      }
+
+      addMessage("assistant", data.answer);
+
+      await loadConversations();
+
+    } catch (error) {
+      addMessage(
+        "assistant",
+        "오류가 발생했습니다: " + error.message
+      );
+    } finally {
+      loading.style.display = "none";
+    }
+  }
+
+
+  function addMessage(role, content) {
+    const chatBox = document.getElementById("chatBox");
+
+    const div = document.createElement("div");
+    div.className = `message ${role}`;
+
+    div.innerText =
+      role === "user"
+        ? "나: " + content
+        : "SleepMate: " + content;
+
+    chatBox.appendChild(div);
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+
+  async function loadData() {
+    try {
+      const response = await fetch(`${API}/api/data`);
+      const data = await response.json();
+
+      const list = document.getElementById("dataList");
+
+      list.innerHTML = "";
+
+      data.slice(0, 20).forEach(item => {
+        const div = document.createElement("div");
+
+        div.className = "data-item";
+
+        div.innerHTML = `
+          <span>
+            <strong>${item.date}</strong>
+            · ${item.value}시간
+            · ${item.memo || ""}
+          </span>
+
+          <button
+            class="delete-btn"
+            onclick="deleteData('${item.id}')"
+          >
+            삭제
+          </button>
+        `;
+
+        list.appendChild(div);
+      });
+
+    } catch (error) {
+      document.getElementById("dataList").innerText =
+        "데이터를 불러오지 못했습니다.";
+    }
+  }
+
+
+  async function addData() {
+    const date = document.getElementById("dateInput").value;
+    const value = document.getElementById("valueInput").value;
+    const memo = document.getElementById("memoInput").value;
+
+    if (!date || !value) {
+      alert("날짜와 수면시간을 입력해 주세요.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API}/api/data`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          date: date,
+          value: Number(value),
+          memo: memo
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("데이터 추가 실패");
+      }
+
+      document.getElementById("valueInput").value = "";
+      document.getElementById("memoInput").value = "";
+
+      await loadData();
+      await loadSummary();
+
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+
+  async function deleteData(id) {
+    if (!confirm("이 데이터를 삭제할까요?")) return;
+
+    try {
+      const response = await fetch(`${API}/api/data/${id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error("삭제 실패");
+      }
+
+      await loadData();
+      await loadSummary();
+
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+
+  async function loadConversations() {
+    try {
+      const response =
+        await fetch(`${API}/api/conversations`);
+
+      const conversations = await response.json();
+
+      const list =
+        document.getElementById("conversationList");
+
+      list.innerHTML = "";
+
+      conversations.forEach(conversation => {
+        const div = document.createElement("div");
+
+        div.className = "conversation-item";
+
+        div.innerHTML = `
+          <span>${conversation.title}</span>
+
+          <div>
+            <button
+              onclick="openConversation('${conversation.id}')"
+            >
+              불러오기
+            </button>
+
+            <button
+              class="delete-btn"
+              onclick="deleteConversation('${conversation.id}')"
+            >
+              삭제
+            </button>
+          </div>
+        `;
+
+        list.appendChild(div);
+      });
+
+    } catch (error) {
+      document.getElementById("conversationList").innerText =
+        "대화 기록을 불러오지 못했습니다.";
+    }
+  }
+
+
+  async function openConversation(id) {
+    try {
+      const response =
+        await fetch(`${API}/api/conversations/${id}`);
+
+      const conversation = await response.json();
+
+      const chatBox =
+        document.getElementById("chatBox");
+
+      chatBox.innerHTML = "";
+
+      conversation.messages.forEach(message => {
+        addMessage(message.role, message.content);
+      });
+
+    } catch (error) {
+      alert("대화를 불러오지 못했습니다.");
+    }
+  }
+
+
+  async function deleteConversation(id) {
+    if (!confirm("이 대화를 삭제할까요?")) return;
+
+    try {
+      await fetch(`${API}/api/conversations/${id}`, {
+        method: "DELETE"
+      });
+
+      await loadConversations();
+
+    } catch (error) {
+      alert("대화를 삭제하지 못했습니다.");
+    }
+  }
+
+
+  document
+    .getElementById("chatInput")
+    .addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        sendChat();
+      }
+    });
+
+
+  loadSummary();
+  loadData();
+  loadConversations();
+</script>
+
+</body>
+</html>
